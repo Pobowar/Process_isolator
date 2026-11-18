@@ -6,9 +6,32 @@ static void deny_syscall(pid_t pid, struct user_regs_struct *reg) {
   PTRACE_CHECK(PTRACE_SETREGS, pid, NULL, reg);
 }
 
-int evaluate(pid_t pid, long tag, struct user_regs_struct *reg,
-             const char *sys_name, int *violation_count) {
-  // Deny write and opens based on flags argument
+int evaluate(pid_t tid, pid_t first, long tag, struct user_regs_struct *reg,
+             const char *sys_name, policy_state_t *state,
+             int unsafe_path_policy) {
+
+  (void)unsafe_path_policy;
+
+  // Handle Privileged / Restricted Syscalls
+  if (tag == TAG_PRIV) {
+    deny_syscall(tid, reg);
+    state->violation_count++;
+    if (state->violation_count >= 3) {
+      fprintf(stderr,
+              "[!] Violation threshold reached. Killing target leader PID %d\n",
+              first);
+      kill(first, SIGKILL);
+    }
+    return 1;
+  }
+
+  // Handle Execution Allow first exec
+  if (tag == TAG_EXEC) {
+    state->exec_count++;
+    return 0;
+  }
+
+  // Deny write opens based on flags argument
   if (tag == TAG_OPEN) {
     long flags = 0;
     if (strcmp(sys_name, "openat") == 0 || strcmp(sys_name, "openat2") == 0) {
@@ -21,36 +44,18 @@ int evaluate(pid_t pid, long tag, struct user_regs_struct *reg,
 
     // Check if flags request writing
     if ((flags & O_ACCMODE) != O_RDONLY) {
-      deny_syscall(pid, reg);
+      deny_syscall(tid, reg);
       return 1; // Denied
     }
   }
 
-  // Deny socket unless domain (arg 0) is AF_UNIX
+  // Deny socket unless domain (arg 0) is AF_UNIX (TAG_NET)
   if (tag == TAG_NET && strcmp(sys_name, "socket") == 0) {
     long domain = reg->rdi; // arg 0
     if (domain != AF_UNIX) {
-      deny_syscall(pid, reg);
+      deny_syscall(tid, reg);
       return 1;
     }
-  }
-
-  // Deny privileged and restricted calls with EPERM, kill process after 3
-  // violations
-  if (tag == TAG_PRIV) {
-    deny_syscall(pid, reg);
-    (*violation_count)++;
-    if (*violation_count >= 3) {
-      fprintf(stderr,
-              "[!] Violation threshold reached. Killing tracee PID %d\n", pid);
-      ptrace(PTRACE_KILL, pid, NULL, NULL);
-    }
-    return 1;
-  }
-
-  // 4. Log execve
-  if (tag == TAG_EXEC) {
-    return 0; // Allowed
   }
 
   return 0;

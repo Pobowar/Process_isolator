@@ -1,8 +1,6 @@
-#ifndef _GNU_SOURCE
 // need for clone , do not touch
 #define _GNU_SOURCE
 #include <sched.h>
-#endif
 
 #ifndef ptrace_header
 
@@ -82,6 +80,10 @@ void seccompp_filter_start();
 #include <sys/stat.h>
 #include <sys/syscall.h>
 
+#define MAX_TIDS 1024
+#define CGROUP_PATH "/sys/fs/cgroup/sandbox_cg"
+#define AF_UNIX 1
+
 typedef struct {
   uid_t uid;
   gid_t gid;
@@ -89,8 +91,18 @@ typedef struct {
   const char *target;
   const char *log_file;
   int verbose;
+  int unsafe_path_policy;
+  long race_delay;
 } child_cfg_t;
 
-#define CGROUP_PATH "/sys/fs/cgroup/sandbox_cg"
-#define AF_UNIX 1
+typedef struct {
+  pid_t tids[MAX_TIDS];
+  int count;
+} tid_set_t;
+
+typedef struct {
+  int violation_count;
+  int exec_count;
+} policy_state_t;
+
 #endif

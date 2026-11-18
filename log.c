@@ -12,8 +12,8 @@ void logger_log_event(pid_t pid, const char *sys_name, long tag, int denied) {
   char buf[512];
   int len = snprintf(
       buf, sizeof(buf),
-      "{\"pid\": %d, \"syscall\": \"%s\", \"tag\": %ld, \"denied\": %s}\n", pid,
-      sys_name ? sys_name : "UNKNOWN", tag, denied ? "true" : "false");
+      "{pid: %d, syscall: %s, tag: %ld, denied: %s, path_status : advisory}\n",
+      pid, sys_name ? sys_name : "UNKNOWN", tag, denied ? "true" : "false");
 
   if (log_fd >= 0) {
     write(log_fd, buf, len);
